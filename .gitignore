@@ -10,3 +10,9 @@ coverage/
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# 本地数据库
+*.db
+
+# 运行时状态（临时休市补录、企业行动批次）；内置日历配置 data/calendar 仍入库
+data/state/

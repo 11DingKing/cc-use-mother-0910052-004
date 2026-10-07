@@ -45,6 +45,15 @@ class SignalTradeRequest(BaseModel):
     position_ratio: float = 0.1
 
 
+class MarkToMarketRequest(BaseModel):
+    prices: Optional[dict] = None
+
+
+class CorporateActionApplyRequest(BaseModel):
+    stock_code: str
+    ex_date: str
+
+
 @router.post("/connect")
 async def connect(request: ConnectRequest):
     """业务模块说明。"""
@@ -175,3 +184,15 @@ async def check_stop_loss():
         "triggered_count": len(results),
         "orders": results,
     }
+
+
+@router.post("/mark-to-market")
+async def mark_to_market(request: MarkToMarketRequest):
+    """日终估值：按收盘价对持仓计价，返回带生效版本指纹的快照。"""
+    return trading_service.mark_to_market(request.prices)
+
+
+@router.post("/apply-corporate-actions")
+async def apply_corporate_actions(request: CorporateActionApplyRequest):
+    """对在仓持仓应用指定除权除息日的企业行动（幂等，重复执行不重复调整）。"""
+    return trading_service.apply_corporate_actions(request.stock_code, request.ex_date)

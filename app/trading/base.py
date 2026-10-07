@@ -58,7 +58,13 @@ class Order:
     strategy_name: Optional[str] = None
     signal_type: Optional[str] = None     # 买卖点类型，如 BUY_1, SELL_2
     signal_strength: float = 0.0
-    
+
+    # 交易日历归属：订单实际落在哪个交易日、为何调整、依据的日历版本
+    trading_day: Optional[str] = None     # YYYY-MM-DD（市场本地日历日）
+    requested_day: Optional[str] = None
+    calendar_note: Optional[str] = None
+    market_manifest: Optional[Dict] = None
+
     def to_dict(self) -> Dict:
         return {
             "order_id": self.order_id,
@@ -78,6 +84,10 @@ class Order:
             "strategy_name": self.strategy_name,
             "signal_type": self.signal_type,
             "signal_strength": self.signal_strength,
+            "trading_day": self.trading_day,
+            "requested_day": self.requested_day,
+            "calendar_note": self.calendar_note,
+            "market_manifest": self.market_manifest,
         }
 
 
@@ -94,7 +104,9 @@ class Position:
     profit_loss: Decimal                  # 盈亏金额
     profit_loss_ratio: float              # 盈亏比例
     updated_at: datetime = field(default_factory=datetime.now)
-    
+    # 除权除息调整审计（解释数量/成本为何变化）
+    adjustments: list = field(default_factory=list)
+
     def to_dict(self) -> Dict:
         return {
             "stock_code": self.stock_code,
@@ -107,6 +119,7 @@ class Position:
             "profit_loss": float(self.profit_loss),
             "profit_loss_ratio": self.profit_loss_ratio,
             "updated_at": self.updated_at.isoformat(),
+            "adjustments": self.adjustments,
         }
 
 

@@ -42,7 +42,19 @@ class BacktestResult(Base):
     
     # 收益曲线（JSON序列化）
     equity_curve_json = Column(Text, nullable=True)
-    
+
+    # 市场数据生效版本与可复现账本
+    market_manifest_json = Column(Text, nullable=True)  # 日历版本 + 企业行动批次指纹
+    adjustments_json = Column(Text, nullable=True)      # 全部除权除息调整明细
+    data_notes_json = Column(Text, nullable=True)       # 休市剔除/信号顺延等说明
+    input_fingerprint = Column(String(64), nullable=True)  # 输入账本哈希
+    trading_days = Column(Integer, nullable=True)
+
+    # 封账：已封账结果为历史事实，任何重跑/覆盖都不得静默改写
+    is_sealed = Column(Integer, default=0, nullable=False)
+    sealed_at = Column(DateTime, nullable=True)
+    seal_reason = Column(String(200), nullable=True)
+
     # 元数据
     status = Column(String(20), default="pending")  # pending, running, completed, failed
     error_message = Column(Text, nullable=True)
@@ -81,6 +93,11 @@ class BacktestResult(Base):
             "losing_trades": self.losing_trades,
             "status": self.status,
             "error_message": self.error_message,
+            "is_sealed": bool(self.is_sealed),
+            "sealed_at": self.sealed_at.isoformat() if self.sealed_at else None,
+            "seal_reason": self.seal_reason,
+            "input_fingerprint": self.input_fingerprint,
+            "trading_days": self.trading_days,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
         }

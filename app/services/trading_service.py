@@ -18,6 +18,7 @@ from app.trading.base import (
 from app.trading.simulation_adapter import SimulationAdapter
 from app.trading.vnpy_adapter import VnpyAdapter
 from app.services.analysis_service import AnalysisService
+from app.marketdata.provider import MarketDataProvider, get_provider
 from app.middleware.exception_handler import AppException
 
 logger = logging.getLogger(__name__)
@@ -48,19 +49,24 @@ class TradingException(AppException):
 class TradingService:
     """业务模块说明。"""
     
-    def __init__(self, adapter: Optional[TradingAdapter] = None):
-        self.adapter = adapter or SimulationAdapter()
+    def __init__(
+        self,
+        adapter: Optional[TradingAdapter] = None,
+        market_provider: Optional[MarketDataProvider] = None,
+    ):
+        self.market_provider = market_provider or get_provider()
+        self.adapter = adapter or SimulationAdapter(market_provider=self.market_provider)
         self.risk_manager = RiskManager()
         self.analysis_service = AnalysisService()
         self._auto_trade_enabled = False
-    
+
     def connect(self, adapter_type: str = "simulation", config: Optional[Dict] = None) -> bool:
         """业务模块说明。"""
         if adapter_type == "vnpy":
             self.adapter = VnpyAdapter(config or {})
         else:
-            self.adapter = SimulationAdapter(config)
-        
+            self.adapter = SimulationAdapter(config, market_provider=self.market_provider)
+
         return self.adapter.connect()
     
     def disconnect(self) -> None:
@@ -293,12 +299,36 @@ class TradingService:
         """业务模块说明。"""
         self._auto_trade_enabled = enabled
         logger.info(f"Auto trade {'enabled' if enabled else 'disabled'}")
-    
+
+    def apply_corporate_actions(self, stock_code: str, ex_date: str) -> Dict[str, Any]:
+        """对在仓持仓应用某除权除息日的企业行动（幂等，重复执行不重复调整）。"""
+        from datetime import date as date_type
+
+        day = date_type.fromisoformat(ex_date)
+        adapter = getattr(self.adapter, "apply_corporate_actions", None)
+        if adapter is None:
+            raise TradingException(
+                "当前交易适配器不支持企业行动处理", stock_code=stock_code
+            )
+        notes = adapter(stock_code, day)
+        return {
+            "stock_code": stock_code,
+            "ex_date": ex_date,
+            "applied_count": len(notes),
+            "adjustments": notes,
+        }
+
+    def mark_to_market(self, prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+        """日终估值：按收盘价对全部持仓计价，返回带版本指纹的估值快照。"""
+        adapter = getattr(self.adapter, "mark_to_market", None)
+        if adapter is None:
+            raise TradingException("当前交易适配器不支持日终估值")
+        return adapter(prices)
+
     def check_stop_loss_take_profit(self) -> List[Dict[str, Any]]:
         """业务模块说明。"""
         results = []
         positions = self.adapter.get_positions()
-        
         for pos in positions:
             if self.risk_manager.check_stop_loss(pos):
                 # 触发止损

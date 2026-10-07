@@ -16,6 +16,12 @@ class BacktestReportGenerator:
             "performance": self._generate_performance(result),
             "trades": self._generate_trades_summary(result),
             "equity_curve": result.equity_curve,
+            # 生效版本与调整审计：解释价格/数量为何调整、支持复现
+            "market_manifest": result.market_manifest,
+            "adjustments": result.adjustments,
+            "data_notes": result.data_notes,
+            "input_fingerprint": result.input_fingerprint,
+            "trading_days": result.trading_days,
         }
     
     def _generate_summary(self, result: BacktestResult) -> Dict[str, Any]:

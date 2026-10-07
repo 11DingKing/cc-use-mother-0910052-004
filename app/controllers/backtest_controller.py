@@ -19,6 +19,11 @@ class RunBacktestRequest(BaseModel):
     end_date: Optional[str] = None
     initial_capital: float = 100000.0
     position_size: float = 1.0
+    calendar_version: Optional[str] = None  # 固定日历版本；缺省用当前生效版本
+
+
+class SealRequest(BaseModel):
+    reason: str = ""
 
 
 @router.post("/run")
@@ -26,7 +31,7 @@ async def run_backtest(request: RunBacktestRequest):
     """业务模块说明。"""
     start = datetime.strptime(request.start_date, "%Y-%m-%d") if request.start_date else None
     end = datetime.strptime(request.end_date, "%Y-%m-%d") if request.end_date else None
-    
+
     return backtest_service.run_backtest(
         request.stock_code,
         request.period,
@@ -34,7 +39,14 @@ async def run_backtest(request: RunBacktestRequest):
         end,
         request.initial_capital,
         request.position_size,
+        request.calendar_version,
     )
+
+
+@router.post("/{result_id}/seal")
+async def seal_result(result_id: int, request: SealRequest):
+    """封账：封账后的历史账本不可被任何重跑或覆盖静默改写。"""
+    return backtest_service.seal_result(result_id, request.reason)
 
 
 @router.get("/{result_id}/report")

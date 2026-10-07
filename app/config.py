@@ -71,14 +71,43 @@ def init_database():
     from app.entities.analysis_result import Base as AnalysisBase
     from app.entities.watchlist import Base as WatchlistBase
     from app.entities.backtest import Base as BacktestBase
-    
+
     engine = get_engine()
-    
+
     # 创建所有表
     StockBase.metadata.create_all(bind=engine)
     AnalysisBase.metadata.create_all(bind=engine)
     WatchlistBase.metadata.create_all(bind=engine)
     BacktestBase.metadata.create_all(bind=engine)
+
+    # 轻量迁移：为已存在的 backtest_results 补齐新版本字段（SQLite 不会自动加列）
+    _ensure_backtest_ledger_columns(engine)
+
+
+def _ensure_backtest_ledger_columns(engine) -> None:
+    """幂等补齐回测账本列。"""
+    from sqlalchemy import inspect, text
+
+    required = {
+        "market_manifest_json": "TEXT",
+        "adjustments_json": "TEXT",
+        "data_notes_json": "TEXT",
+        "input_fingerprint": "VARCHAR(64)",
+        "trading_days": "INTEGER",
+        "is_sealed": "INTEGER NOT NULL DEFAULT 0",
+        "sealed_at": "DATETIME",
+        "seal_reason": "VARCHAR(200)",
+    }
+    inspector = inspect(engine)
+    if "backtest_results" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("backtest_results")}
+    with engine.begin() as conn:
+        for name, ddl_type in required.items():
+            if name not in existing:
+                conn.execute(
+                    text(f"ALTER TABLE backtest_results ADD COLUMN {name} {ddl_type}")
+                )
 
 # 数据源配置
 DATA_SOURCE_CONFIG = {
