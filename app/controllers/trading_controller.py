@@ -175,3 +175,26 @@ async def check_stop_loss():
         "triggered_count": len(results),
         "orders": results,
     }
+
+
+@router.post("/end-of-day/{day}")
+async def end_of_day(day: str):
+    """日终估值与企业行动处理（除权除息、分红入账、数量/成本调整）。
+
+    路径参数 ``day`` 为交易所本地日期 ``YYYY-MM-DD``。返回每条调整的
+    before/after、计算公式与原因，可直接用于核对账本。
+    """
+    return trading_service.end_of_day(day)
+
+
+@router.get("/adjustments")
+async def explain_adjustments():
+    """查询会话内全部价格/数量调整及其原因（订单顺延、除权、分红等）。"""
+    return {"adjustments": trading_service.explain_adjustments()}
+
+
+@router.get("/market-data-pin")
+async def market_data_pin():
+    """当前交易会话固定的数据生效版本（日历/企业行动指纹）。"""
+    pin = trading_service._market_data_pin
+    return {"pin": pin.to_dict() if pin else None}

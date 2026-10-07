@@ -16,6 +16,10 @@ class BacktestReportGenerator:
             "performance": self._generate_performance(result),
             "trades": self._generate_trades_summary(result),
             "equity_curve": result.equity_curve,
+            "adjustments": result.adjustments,
+            "skipped_candles": result.skipped_candles,
+            "calendar": result.calendar_info,
+            "trading_days_used": result.trading_days_used,
         }
     
     def _generate_summary(self, result: BacktestResult) -> Dict[str, Any]:
@@ -60,6 +64,7 @@ class BacktestReportGenerator:
                 "profit": t.profit,
                 "profit_pct": f"{t.profit_pct * 100:.2f}%",
                 "is_closed": t.is_closed,
+                "adjustments": t.adjustments,
             }
             for t in result.trades
         ]

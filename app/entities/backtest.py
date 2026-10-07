@@ -39,9 +39,17 @@ class BacktestResult(Base):
     
     # 交易记录（JSON序列化）
     trades_json = Column(Text, nullable=True)
-    
+
     # 收益曲线（JSON序列化）
     equity_curve_json = Column(Text, nullable=True)
+
+    # 交易日历/企业行动生效版本钉住与调整留痕
+    market_data_pin_json = Column(Text, nullable=True)
+    adjustments_json = Column(Text, nullable=True)
+    skipped_candles_json = Column(Text, nullable=True)
+    ledger_hash = Column(String(64), nullable=True)
+    sealed = Column(Integer, nullable=False, default=0)  # 1=已封账，禁止改写
+    sealed_at = Column(DateTime, nullable=True)
     
     # 元数据
     status = Column(String(20), default="pending")  # pending, running, completed, failed

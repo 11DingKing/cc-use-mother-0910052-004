@@ -1,6 +1,7 @@
 """业务模块说明。"""
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,12 +40,13 @@ from app.middleware.logging_middleware import register_logging_middleware
 register_logging_middleware(app)
 
 # 注册控制器路由
-from app.controllers import stock_router, analysis_router, watchlist_router, backtest_router, trading_router
+from app.controllers import stock_router, analysis_router, watchlist_router, backtest_router, trading_router, marketdata_router
 app.include_router(stock_router)
 app.include_router(analysis_router)
 app.include_router(watchlist_router)
 app.include_router(backtest_router)
 app.include_router(trading_router)
+app.include_router(marketdata_router)
 
 
 # 健康检查端点
@@ -65,6 +67,16 @@ async def startup_event():
         logger.info("数据库初始化完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
+
+    # 可选：启动时幂等导入本地交易日历/企业行动种子（JSON 路径，可重复执行）
+    seed_path = os.getenv("MARKETDATA_SEED_FILE")
+    if seed_path:
+        try:
+            from app.marketdata.registry import get_registry
+            counts = get_registry().load_seed_file(seed_path)
+            logger.info(f"市场数据种子导入完成: {counts}")
+        except Exception as e:
+            logger.error(f"市场数据种子导入失败 ({seed_path}): {e}")
     
     logger.info(f"API文档地址: http://{APP_CONFIG['host']}:{APP_CONFIG['port']}/docs")
 

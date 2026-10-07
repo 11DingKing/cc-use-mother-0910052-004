@@ -1,0 +1,124 @@
+{
+  "calendar": [
+    {
+      "market": "CN",
+      "day": "2024-01-01",
+      "is_open": false,
+      "reason": "元旦",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-newyear",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-02-04",
+      "is_open": true,
+      "reason": "春节调休补班",
+      "kind": "makeup",
+      "client_id": "cn-holiday-2024-spring-makeup-1",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-02-09",
+      "is_open": false,
+      "reason": "春节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-spring-1",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-02-12",
+      "is_open": false,
+      "reason": "春节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-spring-2",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-02-18",
+      "is_open": true,
+      "reason": "春节调休补班",
+      "kind": "makeup",
+      "client_id": "cn-holiday-2024-spring-makeup-2",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-10-01",
+      "is_open": false,
+      "reason": "国庆节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-national-1",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-10-02",
+      "is_open": false,
+      "reason": "国庆节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-national-2",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-10-03",
+      "is_open": false,
+      "reason": "国庆节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-national-3",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-10-04",
+      "is_open": false,
+      "reason": "国庆节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-national-4",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-10-07",
+      "is_open": false,
+      "reason": "国庆节",
+      "kind": "holiday",
+      "client_id": "cn-holiday-2024-national-5",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-09-29",
+      "is_open": true,
+      "reason": "国庆调休补班",
+      "kind": "makeup",
+      "client_id": "cn-holiday-2024-national-makeup-1",
+      "source": "seed"
+    },
+    {
+      "market": "CN",
+      "day": "2024-10-12",
+      "is_open": true,
+      "reason": "国庆调休补班",
+      "kind": "makeup",
+      "client_id": "cn-holiday-2024-national-makeup-2",
+      "source": "seed"
+    }
+  ],
+  "actions": [
+    {
+      "stock_code": "600000",
+      "action_type": "cash_dividend",
+      "ex_date": "2024-07-24",
+      "cash_per_share": 0.32,
+      "currency": "CNY",
+      "title": "2023 年度权益分派（示例）",
+      "client_id": "600000-2024-dividend-example",
+      "source": "seed"
+    }
+  ]
+}

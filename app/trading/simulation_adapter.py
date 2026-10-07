@@ -1,7 +1,7 @@
 """业务模块说明。"""
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Dict, List, Optional
 
@@ -13,6 +13,11 @@ from app.trading.base import (
     OrderSide,
     Position,
     Account,
+)
+from app.marketdata.actions import (
+    CorporateAction,
+    CorporateActionEngine,
+    LedgerAdjustment,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +58,22 @@ class SimulationAdapter(TradingAdapter):
         
         # 模拟行情
         self._quotes: Dict[str, Dict] = {}
-    
+
+        # 生效版本相关（默认不注入，保持纯模拟的旧行为；
+        # 生产路径由 TradingService 注入与回测/估值相同的版本）
+        self._calendar = None
+        self._actions: Optional[CorporateActionEngine] = None
+        self.adjustments: List[Dict] = []
+
+    def bind_market_data(self, calendar=None, actions: Optional[CorporateActionEngine] = None) -> None:
+        """绑定与回测/日终估值相同的交易日历与企业行动生效版本。"""
+        self._calendar = calendar
+        self._actions = actions
+
+    @property
+    def calendar(self):
+        return self._calendar
+
     def connect(self) -> bool:
         """业务模块说明。"""
         self._connected = True
@@ -83,7 +103,20 @@ class SimulationAdapter(TradingAdapter):
             order.status = OrderStatus.FAILED
             order.error_message = "交易连接已断开"
             return order
-        
+
+        # 交易日历校验：休市日拒单并给出下一交易日，绝不静默顺延
+        if self._calendar is not None:
+            order_day = self._calendar.local_date(order.created_at)
+            day_entry = self._calendar.entry_for(order_day)
+            if not day_entry.is_open:
+                nxt = self._calendar.next_trading_day(order_day)
+                order.status = OrderStatus.REJECTED
+                order.error_message = (
+                    f"{order_day.isoformat()} 非交易日（{day_entry.reason}），订单不予成交"
+                    + (f"，下一交易日 {nxt.isoformat()}" if nxt else "")
+                )
+                return order
+
         # 获取行情
         quote = self.get_quote(order.stock_code)
         if not quote:
@@ -307,3 +340,98 @@ class SimulationAdapter(TradingAdapter):
             "ask_volume_1": 1000,
             "datetime": datetime.now().isoformat(),
         }
+
+    # ------------------------------------------------------------------
+    # 企业行动：日终除权除息
+    # ------------------------------------------------------------------
+
+    def apply_corporate_actions(self, day: date) -> List[Dict]:
+        """日终批处理：对全部持仓应用 ``day`` 除权日的企业行动。
+
+        现货账户数量按整股取整，零股显式留痕；现金分红增加可用资金；
+        单位成本按行动规则摊薄/下调。每条调整都带 before/after 与公式。
+        """
+        if self._actions is None:
+            return []
+
+        results: List[Dict] = []
+        for stock_code in list(self._positions.keys()):
+            for action in self._actions.on_day(stock_code, day):
+                pos = self._positions.get(stock_code)
+                if pos is None or pos.quantity <= 0:
+                    continue
+                holding = self._actions.apply_to_holding(
+                    action,
+                    Decimal(str(pos.quantity)),
+                    pos.avg_cost,
+                    integral_shares=True,
+                )
+                pos.quantity = int(holding.quantity_after)
+                pos.available_quantity = pos.quantity
+                pos.avg_cost = holding.avg_cost_after
+                if holding.cash_delta != 0:
+                    self._account.available_cash += holding.cash_delta
+
+                # 行情价调整为除权参考价（若该日尚未设置新行情）
+                prev_price = pos.current_price
+                ref = self._actions.theoretical_ex_price(action, prev_price)
+                pos.current_price = Decimal(str(ref["theoretical_price"]))
+                self.set_quote(stock_code, float(ref["theoretical_price"]))
+
+                for adj in holding.adjustments:
+                    self.adjustments.append(adj.to_dict())
+                price_adj = LedgerAdjustment(
+                    kind="price_reference",
+                    stock_code=stock_code,
+                    day=day.isoformat(),
+                    field_name="price",
+                    before=ref["prev_close"],
+                    after=ref["theoretical_price"],
+                    reason=action.describe(),
+                    formula=ref["formula"],
+                    action_client_id=action.client_id,
+                    action_type=action.action_type.value,
+                )
+                self.adjustments.append(price_adj.to_dict())
+
+                # 重算市值/账户
+                pos.market_value = pos.current_price * pos.quantity
+                if pos.avg_cost > 0:
+                    pos.profit_loss = (pos.current_price - pos.avg_cost) * pos.quantity
+                    pos.profit_loss_ratio = float(
+                        (pos.current_price - pos.avg_cost) / pos.avg_cost
+                    )
+                pos.updated_at = datetime.now()
+                self._refresh_account()
+
+                results.append({
+                    "stock_code": stock_code,
+                    "day": day.isoformat(),
+                    "action": action.to_dict(),
+                    "quantity_before": float(holding.quantity_before),
+                    "quantity_after": float(holding.quantity_after),
+                    "avg_cost_before": float(holding.avg_cost_before),
+                    "avg_cost_after": float(holding.avg_cost_after),
+                    "cash_delta": float(holding.cash_delta),
+                    "fractional_delta": float(holding.fractional_delta),
+                    "price_reference": ref,
+                    "adjustments": [a.to_dict() for a in holding.adjustments]
+                    + [price_adj.to_dict()],
+                })
+                logger.info(
+                    f"Corporate action applied: {stock_code} {action.action_type.value} "
+                    f"on {day} -> qty {holding.quantity_before}->{holding.quantity_after}"
+                )
+        return results
+
+    def _refresh_account(self) -> None:
+        """按当前持仓与现金重算账户汇总（日终估值口径）。"""
+        self._account.market_value = sum(p.market_value for p in self._positions.values())
+        self._account.total_assets = self._account.available_cash + self._account.market_value
+        self._account.profit_loss = sum(p.profit_loss for p in self._positions.values())
+        cost_basis = self._account.total_assets - self._account.profit_loss
+        if cost_basis > 0:
+            self._account.profit_loss_ratio = float(
+                self._account.profit_loss / cost_basis
+            )
+        self._account.updated_at = datetime.now()

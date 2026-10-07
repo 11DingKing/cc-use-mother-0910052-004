@@ -65,20 +65,56 @@ def db_session_scope():
         session.close()
 
 
+def _ensure_marketdata_columns(engine):
+    """轻量 schema 补齐：为旧库追加交易日历/企业行动/封账相关列。
+
+    项目未引入迁移框架，这里对已有表做幂等的 ADD COLUMN
+    （SQLite/PostgreSQL 均支持该语法），新库由 create_all 直接建齐。
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    required = {
+        "backtest_results": [
+            ("market_data_pin_json", "TEXT"),
+            ("adjustments_json", "TEXT"),
+            ("skipped_candles_json", "TEXT"),
+            ("ledger_hash", "VARCHAR(64)"),
+            ("sealed", "INTEGER NOT NULL DEFAULT 0"),
+            ("sealed_at", "DATETIME"),
+        ],
+    }
+    with engine.begin() as conn:
+        for table, columns in required.items():
+            if not inspector.has_table(table):
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table)}
+            for name, ddl_type in columns:
+                if name not in existing:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl_type}")
+                    )
+
+
 def init_database():
     """业务模块说明。"""
     from app.entities.stock import Base as StockBase
     from app.entities.analysis_result import Base as AnalysisBase
     from app.entities.watchlist import Base as WatchlistBase
     from app.entities.backtest import Base as BacktestBase
-    
+    from app.marketdata.entities import MarketDataBase
+
     engine = get_engine()
-    
+
     # 创建所有表
     StockBase.metadata.create_all(bind=engine)
     AnalysisBase.metadata.create_all(bind=engine)
     WatchlistBase.metadata.create_all(bind=engine)
     BacktestBase.metadata.create_all(bind=engine)
+    MarketDataBase.metadata.create_all(bind=engine)
+
+    # 旧库列补齐（幂等）
+    _ensure_marketdata_columns(engine)
 
 # 数据源配置
 DATA_SOURCE_CONFIG = {

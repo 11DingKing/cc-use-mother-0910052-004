@@ -5,6 +5,7 @@ from app.controllers.analysis_controller import router as analysis_router
 from app.controllers.watchlist_controller import router as watchlist_router
 from app.controllers.backtest_controller import router as backtest_router
 from app.controllers.trading_controller import router as trading_router
+from app.controllers.marketdata_controller import router as marketdata_router
 
 __all__ = [
     "stock_router",
@@ -12,4 +13,5 @@ __all__ = [
     "watchlist_router",
     "backtest_router",
     "trading_router",
+    "marketdata_router",
 ]

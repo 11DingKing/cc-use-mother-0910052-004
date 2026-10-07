@@ -18,6 +18,7 @@ from app.trading.base import (
 from app.trading.simulation_adapter import SimulationAdapter
 from app.trading.vnpy_adapter import VnpyAdapter
 from app.services.analysis_service import AnalysisService
+from app.marketdata.registry import MarketDataPin, get_registry
 from app.middleware.exception_handler import AppException
 
 logger = logging.getLogger(__name__)
@@ -48,11 +49,13 @@ class TradingException(AppException):
 class TradingService:
     """业务模块说明。"""
     
-    def __init__(self, adapter: Optional[TradingAdapter] = None):
+    def __init__(self, adapter: Optional[TradingAdapter] = None, registry=None):
         self.adapter = adapter or SimulationAdapter()
         self.risk_manager = RiskManager()
         self.analysis_service = AnalysisService()
         self._auto_trade_enabled = False
+        self.registry = registry or get_registry()
+        self._market_data_pin: Optional[MarketDataPin] = None
     
     def connect(self, adapter_type: str = "simulation", config: Optional[Dict] = None) -> bool:
         """业务模块说明。"""
@@ -60,8 +63,29 @@ class TradingService:
             self.adapter = VnpyAdapter(config or {})
         else:
             self.adapter = SimulationAdapter(config)
-        
-        return self.adapter.connect()
+
+        connected = self.adapter.connect()
+        # 绑定与回测/历史查询相同的生效版本（适配器不支持时忽略，如实盘网关）
+        self.bind_market_data()
+        return connected
+
+    def bind_market_data(
+        self,
+        market: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> MarketDataPin:
+        """解析并固定本次交易会话使用的日历/企业行动版本。"""
+        pin = self.registry.pin(market=market and market.upper(), as_of=as_of)
+        calendar = self.registry.calendar_as_of_pin(pin)
+        actions = self.registry.actions_as_of_pin(pin)
+        if hasattr(self.adapter, "bind_market_data"):
+            self.adapter.bind_market_data(calendar, actions)
+        self._market_data_pin = pin
+        logger.info(
+            f"Trading session bound to calendar v{pin.calendar_version_id} "
+            f"({pin.calendar_fingerprint}) as_of={pin.as_of}"
+        )
+        return pin
     
     def disconnect(self) -> None:
         """业务模块说明。"""
@@ -289,6 +313,40 @@ class TradingService:
         
         return None
     
+    # ------------------------------------------------------------------
+    # 日终估值与企业行动
+    # ------------------------------------------------------------------
+
+    def end_of_day(self, day: str) -> Dict[str, Any]:
+        """日终处理：应用当日企业行动并重算估值，返回完整调整说明。"""
+        from datetime import date as _date
+        try:
+            d = _date.fromisoformat(day)
+        except ValueError:
+            raise TradingException("日期格式应为 YYYY-MM-DD", details={"day": day})
+
+        applied: List[Dict[str, Any]] = []
+        if isinstance(self.adapter, SimulationAdapter):
+            applied = self.adapter.apply_corporate_actions(d)
+
+        account = self.adapter.get_account()
+        positions = self.adapter.get_positions()
+        return {
+            "day": day,
+            "corporate_actions_applied": applied,
+            "account": account.to_dict() if account else None,
+            "positions": [p.to_dict() for p in positions],
+            "market_data_pin": (
+                self._market_data_pin.to_dict() if self._market_data_pin else None
+            ),
+        }
+
+    def explain_adjustments(self) -> List[Dict[str, Any]]:
+        """返回会话内全部价格/数量调整记录（为何调整、公式、前后值）。"""
+        if isinstance(self.adapter, SimulationAdapter):
+            return list(self.adapter.adjustments)
+        return []
+
     def enable_auto_trade(self, enabled: bool = True) -> None:
         """业务模块说明。"""
         self._auto_trade_enabled = enabled
